@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using SlitherSharp.Models;
+﻿using SlitherSharp.Models;
 using static SlitherSharp.Constants;
 
 namespace SlitherSharp;
@@ -8,18 +7,17 @@ internal class Slither
 {
     private Direction _currentDirection = Direction.Right;
 
-    private int _snakeSpeed = 200;
-    private LinkedList<Snake> _snake;
-
+    private const int SpeedDelta = 9;
+    private int _snakeSpeed = 400;
     private int _applesCollected = 0;
 
-    private Apple _applePosition = new Apple();
+    private readonly Apple _apple = new();
+    private readonly LinkedList<Snake> _snake = new();
 
-    private Random _random = new Random(DateTime.Now.Millisecond);
+    private readonly Random _random = new(DateTime.Now.Millisecond);
 
     public Slither()
     {
-        _snake = new LinkedList<Snake>();
         _snake.AddFirst(new Snake{X = GameWidth / 2, Y = GameHeight / 2});
     }
 
@@ -44,32 +42,41 @@ internal class Slither
 
     private async Task MoveSnake()
     {
+        if (_snake.Last is null)
+            throw new ArgumentNullException("The snake initialized without a starting value.");
+
         await SetSnakePosition(_snake.Last);
     }
 
-    private async Task SetSnakePosition(LinkedListNode<Snake> snakeNode)
+    private Task SetSnakePosition(LinkedListNode<Snake> snakeNode)
     {
-        if (snakeNode.Next == null)
+        while (true)
         {
-            SetAndWrite(snakeNode.Value.X, snakeNode.Value.Y, BLANK);
+            if (snakeNode.Next == null)
+            {
+                SetAndWrite(snakeNode.Value.X, snakeNode.Value.Y, BLANK);
+            }
+
+
+            if (snakeNode.Previous != null)
+            {
+                snakeNode.Value.X = snakeNode.Previous.Value.X;
+                snakeNode.Value.Y = snakeNode.Previous.Value.Y;
+                SetAndWrite(snakeNode.Previous.Value.X, snakeNode.Previous.Value.Y, SNAKE);
+
+                snakeNode = snakeNode.Previous;
+                continue;
+            }
+
+            ProcessSnakeDirection(snakeNode);
+
+            break;
         }
-            
 
-        if (snakeNode.Previous != null)
-        {
-            snakeNode.Value.X = snakeNode.Previous.Value.X;
-            snakeNode.Value.Y = snakeNode.Previous.Value.Y;
-            SetAndWrite(snakeNode.Previous.Value.X, snakeNode.Previous.Value.Y, SNAKE);
-            await SetSnakePosition(snakeNode.Previous); // recurse through the linked list.
-            return;
-        }
-
-        SetCurrentDirection(snakeNode);
-
-        
+        return Task.CompletedTask;
     }
 
-    private void SetCurrentDirection(LinkedListNode<Snake> snakeNode)
+    private void ProcessSnakeDirection(LinkedListNode<Snake> snakeNode)
     {
         switch (_currentDirection)
         {
@@ -110,24 +117,23 @@ internal class Slither
 
     private async Task CheckAndMoveApple()
     {
-        if (_applePosition.X == _snake.First.Value.X && _applePosition.Y == _snake.First.Value.Y)
+        if (_apple.X == _snake.First?.Value.X && _apple.Y == _snake.First.Value.Y)
         {
             _applesCollected += 1;
 
-            _snake.AddFirst(new Snake { X = _applePosition.X, Y = _applePosition.Y });
+            _snake.AddFirst(new Snake { X = _apple.X, Y = _apple.Y });
 
             FindValidApplePosition();
 
-            SetAndWrite(_applePosition.X, _applePosition.Y, APPLE);
+            SetAndWrite(_apple.X, _apple.Y, APPLE);
+
+            IncreaseSpeed(SpeedDelta);
         }
 
         await Task.CompletedTask;
     }
 
-    private bool AppleSnakeCollision()
-    {
-        return _snake.Any(snake => _applePosition.X == snake.X && _applePosition.Y == snake.Y);
-    }
+    
 
     private void SetAndWrite(int left, int top, char value)
     {
@@ -139,7 +145,10 @@ internal class Slither
     {
         if (Console.WindowHeight != ConsoleHeight || Console.WindowWidth != ConsoleWidth)
         {
-            Console.SetWindowSize(ConsoleWidth, ConsoleHeight);
+            if (OperatingSystem.IsWindows())
+                Console.SetWindowSize(ConsoleWidth, ConsoleHeight);
+            else
+                throw new NotSupportedException($"The operating system you are running this on is not supported.");
         }
 
         await Task.CompletedTask;
@@ -206,7 +215,7 @@ internal class Slither
 
         FindValidApplePosition();
 
-        SetAndWrite(_applePosition.X, _applePosition.Y, APPLE);
+        SetAndWrite(_apple.X, _apple.Y, APPLE);
 
         SetAndWrite(_snake.First.Value.X, _snake.First.Value.Y, SNAKE);
 
@@ -217,8 +226,18 @@ internal class Slither
     {
         do
         {
-            _applePosition.X = _random.Next(1, GameWidth - 1);
-            _applePosition.Y = _random.Next(1, GameHeight - 1);
+            _apple.X = _random.Next(1, GameWidth - 1);
+            _apple.Y = _random.Next(1, GameHeight - 1);
         } while (AppleSnakeCollision());
+    }
+
+    private bool AppleSnakeCollision()
+    {
+        return _snake.Any(snake => _apple.X == snake.X && _apple.Y == snake.Y);
+    }
+
+    private void IncreaseSpeed(int x)
+    {
+        _snakeSpeed = (int)(_snakeSpeed * Math.Log(x, 10)) + 0;
     }
 }
